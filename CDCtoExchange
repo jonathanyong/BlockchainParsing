@@ -1,0 +1,38 @@
+import requests
+import json
+import datetime
+import pandas as pd
+import locale
+
+erc_20 = []
+def vendor(contract_address,from_wallet,to_wallet,api_key):
+    url = f"https://api.etherscan.io/api?module=account&action=tokentx&contractaddress={contract_address}&address={to_wallet}&sort=desc&page=1&apikey={api_key}"
+    response = requests.get(url)
+    json_data = json.loads(response.text)
+    count = 0
+    for tx in json_data['result']:
+        if tx['from'] == from_wallet.lower() and tx['to'] == to_wallet.lower():
+            erc_20.append(tx)
+            count += 1
+            if count == 5:
+                break
+
+Circle = vendor('0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48','0x55FE002aefF02F77364de339a1292923A15844B8','0xCFFAd3200574698b78f32232aa9D63eABD290703','2GKF8NC57A9TZVICCD3BG7X1YZBN3NQAXH')
+Paxos = vendor('0x8e870d67f660d95d5be530380d0ec0bd388289e1','0xc5a8859c44aC8AA2169aFaCF45B87C08593beC10','0x72A53cDBBcc1b9efa39c834A540550e23463AAcB','2GKF8NC57A9TZVICCD3BG7X1YZBN3NQAXH')
+
+# convert transaction data to a DataFrame using pandas
+def process_transactions(transactions):
+    df = pd.DataFrame(transactions)
+    df["timeStamp"] = df["timeStamp"].apply(lambda x: datetime.datetime.fromtimestamp(int(x)).strftime('%d/%m/%Y'))
+    df.loc[df['tokenSymbol'] == 'USDC', 'value'] = df.loc[df['tokenSymbol'] == 'USDC', 'value'].astype(float) / 10**6
+    df.loc[df['tokenSymbol'] == 'USDP', 'value'] = df.loc[df['tokenSymbol'] == 'USDP', 'value'].astype(float) / 10**18
+    if 'gasPrice' in df.columns:
+        df['gasPrice'] = df['gasPrice'].apply(lambda x: float(x) / 10**18)
+        df['gasUsed'] = df['gasUsed'].apply(lambda x: float(x))
+        df['Transaction Fee'] = df['gasPrice'] * df['gasUsed']
+    locale.setlocale(locale.LC_ALL, '')
+    df['value'] = df['value'].map(lambda x: locale.currency(x, grouping=True))
+    df.to_excel("CDCtoExchange.xlsx", index=False)
+
+# export DataFrame to an Excel sheet
+process_transactions(erc_20)
